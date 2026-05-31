@@ -18,6 +18,9 @@ Cloud Scheduler ──► temp-alerts-job (cada 1h)     ──► run-agents
               ├──► fetch-weather-job (cada 1h)   ──► fetch-weather
               └──► run-predictions-job (cada 6h) ──► run-predictions
 
+React Web Admin ──► Firebase Hosting ──► Firestore (auth, users, devices)
+                         └──► Cloud Run API (queries pesadas a BQ)
+
 Flutter ──► Cloud Run API ──► Firestore (latest)
                          └──► BigQuery (history)
 
@@ -32,7 +35,7 @@ cloud-wati/
 │   ├── fetch-weather/      # HTTP trigger Scheduler, OpenWeather API
 │   ├── ingest-telemetry/   # HTTP trigger ESP32 (Node.js 20)
 │   ├── process-gcs-batch/  # GCS trigger OBJECT_FINALIZE
-│   ├── run-agents/         # HTTP interno, Gemini 1.5 Flash
+│   ├── run-agents/         # HTTP interno, Gemini 1.5 Pro (Mejor razonamiento)
 │   ├── run-predictions/    # HTTP trigger Scheduler, BQ ML
 │   ├── scan-bill/          # HTTP trigger OCR facturas CRE
 │   └── train-models/       # HTTP trigger Scheduler, BQ ML

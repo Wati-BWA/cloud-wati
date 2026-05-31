@@ -70,12 +70,17 @@
 │                              │                                          │
 │                     Firestore (snapshot) + BigQuery (historico)         │
 │                                                                         │
+│   React Web Admin ─► Firebase Hosting (Frontend)                     │
+│                        │                                          │
+│                        └──► Firestore (tiempo real)               │
+│                                                                         │
 │   Admin/Operador ──► Looker Studio (conectado a BigQuery, sin costo)   │
 │                                                                         │
 │   ┌──────────────────────────────────────────────────────────────────┐ │
 │   │  Servicios de soporte                                            │ │
-│   │  Firebase Auth     → usuarios Flutter (Google Sign-In)           │ │
-│   │  Firebase FCM      → push notifications al móvil                 │ │
+│   │  Firebase Auth     → usuarios Flutter y React Web Admin           │ │
+│   │  Firebase FCM      → push notifications al móvil
+│   │  Firebase Hosting  → hosting gratuito para React Web Admin         │                 │ │
 │   │  Cloud Vision API  → OCR facturas CRE (1,000 req/mes gratis)    │ │
 │   │  Vertex AI Gemini  → agentes IA (free tier disponible)           │ │
 │   │  Secret Manager    → API keys, tokens                              │ │

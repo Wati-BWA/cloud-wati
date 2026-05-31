@@ -14,6 +14,7 @@ ESP32 (HTTP) -> Cloud Function ingest-telemetry -> BigQuery raw_telemetry
                                    |            -> Firestore devices/{id}
 ESP32 (NDJSON) -> GCS uploads/ -> Cloud Function process-gcs-batch -> BigQuery
 
+React Web Admin (Firebase Hosting) -> Firestore / Cloud Run API
 Cloud Run API (Firebase Auth) -> /api/devices
 Cloud Scheduler -> temp-alerts-job, fetch-weather-job, run-predictions-job
 ```
@@ -184,6 +185,7 @@ T-001 -> T-002 -> T-003 -> T-004 -> T-005 -> T-006
 - BigQuery raw_telemetry schema: device_id, temperature_celsius, event_timestamp.
 - Firestore devices/{id} actualizado con ultima telemetria.
 - Cloud Run API protegida con Firebase Auth.
+- React Web Admin desplegado en Firebase Hosting comunicándose con Firestore.
 - Scheduler con tres jobs: run-agents, fetch-weather, run-predictions.
 - E2E: HTTP directo + NDJSON a GCS generan filas en BigQuery.
 
