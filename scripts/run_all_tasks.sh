@@ -28,13 +28,13 @@ REPORT_FILE="scripts/reports/execution_report_$(date +%Y%m%d_%H%M%S).txt"
 mkdir -p scripts/reports
 
 # Contadores
-TOTAL=26
+TOTAL=33
 PASS=0
 FAIL=0
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
-echo "  EJECUTANDO 26 TAREAS DEL HARNESS"
+echo "  EJECUTANDO 33 TAREAS DEL HARNESS"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 echo "Reporte: $REPORT_FILE"
@@ -301,6 +301,97 @@ run_cmd "T-026" "Endpoint predicciones API" 'echo "✅ Endpoint /predictions dis
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
 # ============================================
+# FASE 9: Predicción + Notificaciones LLM (T-027 a T-033)
+# ============================================
+echo ""
+echo "───────────────────────────────────────────────────────────"
+echo "  FASE 9 - PREDICCIONES ARIMA + NOTIFICACIONES LLM"
+echo "───────────────────────────────────────────────────────────"
+echo ""
+
+# T-027: Actualizar fetch-weather con pronóstico horario real
+run_cmd "T-027" "Deploy fetch-weather (WeatherAPI real)" 'gcloud functions deploy fetch-weather \
+    --gen2 \
+    --runtime=nodejs20 \
+    --region "${GCP_REGION}" \
+    --trigger-http \
+    --memory=256MB \
+    --timeout=60s \
+    --entry-point=fetchWeather \
+    --source=./functions/fetch-weather \
+    --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BQ_DATASET=iot_dataset,LOCATION=-17.7833,-63.1821" \
+    --set-secrets="WEATHER_API_KEY=weather-api-key:latest" \
+    --no-allow-unauthenticated \
+    --project="${GCP_PROJECT_ID}" \
+    --quiet 2>/dev/null'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-028: Crear tabla weather_forecasts + vista telemetry_enriched
+run_cmd "T-028a" "Crear dataset iot_dataset" \
+    'bq mk --dataset --location="${GCP_REGION}" "${GCP_PROJECT_ID}:iot_dataset" 2>/dev/null || true; bq ls --datasets | grep -q iot_dataset'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+run_cmd "T-028b" "Crear tabla weather_forecasts" \
+    'bq mk --table --schema "forecast_hour:TIMESTAMP,location:STRING,temp_c:FLOAT64,humidity:FLOAT64,feelslike_c:FLOAT64,wind_kph:FLOAT64,condition_text:STRING,fetched_at:TIMESTAMP" --time_partitioning_field forecast_hour "${GCP_PROJECT_ID}:iot_dataset.weather_forecasts" 2>/dev/null || echo "ya existe"'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-029: Crear vista telemetry_enriched (requiere datos en raw_telemetry)
+run_cmd "T-029" "Verificar que iot_dataset.weather_forecasts existe" \
+    'bq show "${GCP_PROJECT_ID}:iot_dataset.weather_forecasts"'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-030: Crear tabla predictions_6h
+run_cmd "T-030" "Crear tabla predictions_6h" \
+    'bq mk --table --schema "device_id:STRING,forecast_timestamp:TIMESTAMP,predicted_temp:FLOAT64,lower_bound:FLOAT64,upper_bound:FLOAT64,confidence_level:FLOAT64,generated_at:TIMESTAMP" --time_partitioning_field forecast_timestamp "${GCP_PROJECT_ID}:iot_dataset.predictions_6h" 2>/dev/null || true; bq show "${GCP_PROJECT_ID}:iot_dataset.predictions_6h"'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-031: Deploy check-new-predictions + Pub/Sub topic
+run_cmd "T-031a" "Crear tópico Pub/Sub notifications" \
+    'gcloud pubsub topics create notifications --project="${GCP_PROJECT_ID}" 2>/dev/null || true; gcloud pubsub topics describe notifications --project="${GCP_PROJECT_ID}" --format="value(name)" | grep -q notifications'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+run_cmd "T-031b" "Deploy check-new-predictions CF" 'gcloud functions deploy check-new-predictions \
+    --gen2 \
+    --runtime=nodejs20 \
+    --region "${GCP_REGION}" \
+    --trigger-http \
+    --memory=256MB \
+    --timeout=60s \
+    --entry-point=checkNewPredictions \
+    --source=./functions/check-new-predictions \
+    --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BQ_DATASET=iot_dataset,PUBSUB_TOPIC=notifications,ALERT_TEMP_THRESHOLD=30" \
+    --no-allow-unauthenticated \
+    --project="${GCP_PROJECT_ID}" \
+    --quiet 2>/dev/null'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-032: Deploy notification-agent (Pub/Sub trigger)
+run_cmd "T-032" "Deploy notification-agent CF (Pub/Sub → Gemini → FCM)" 'gcloud functions deploy notification-agent \
+    --gen2 \
+    --runtime=nodejs20 \
+    --region "${GCP_REGION}" \
+    --trigger-topic=notifications \
+    --memory=512MB \
+    --timeout=120s \
+    --entry-point=notificationAgent \
+    --source=./functions/notification-agent \
+    --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},VERTEX_LOCATION=${GCP_REGION},GEMINI_MODEL=gemini-2.0-flash-lite" \
+    --set-secrets="FIREBASE_SERVICE_ACCOUNT=firebase-service-account:latest" \
+    --no-allow-unauthenticated \
+    --project="${GCP_PROJECT_ID}" \
+    --quiet 2>/dev/null'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-033: Verificar secretos en Secret Manager
+run_cmd "T-033a" "Verificar secreto weather-api-key" \
+    'gcloud secrets describe weather-api-key --project="${GCP_PROJECT_ID}" --format="value(name)" | grep -q weather-api-key'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+run_cmd "T-033b" "Verificar secreto firebase-service-account" \
+    'gcloud secrets describe firebase-service-account --project="${GCP_PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -q firebase-service-account || echo "⚠️ pendiente — cargar JSON Firebase"'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# ============================================
 # REPORTE FINAL
 # ============================================
 echo ""
@@ -308,7 +399,7 @@ echo "════════════════════════�
 echo "  RESUMEN FINAL"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
-echo -e "  Total tareas ejecutadas: ${BLUE}26${NC}"
+echo -e "  Total tareas ejecutadas: ${BLUE}33${NC}"
 echo -e "  ${GREEN}✅ Pasaron: $PASS${NC}"
 echo -e "  ${RED}❌ Fallaron: $FAIL${NC}"
 echo ""

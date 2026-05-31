@@ -1,14 +1,13 @@
 {
   "name": "fetch-weather",
   "version": "1.0.0",
-  "description": "Fetch weather data and save to BQ",
+  "description": "Fetches hourly weather forecast from WeatherAPI and stores in BigQuery",
   "main": "index.js",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20"
   },
   "dependencies": {
-    "@google-cloud/functions-framework": "^3.4.0",
-    "@google-cloud/bigquery": "^7.9.0",
-    "@google-cloud/secret-manager": "^5.0.1"
+    "@google-cloud/bigquery": "^7.9.1",
+    "@google-cloud/functions-framework": "^3.4.0"
   }
 }
