@@ -1,6 +1,6 @@
 # cloud-wati — IoT Pipeline GCP
 
-> **Build With AI 2026 · Wati CRE · Santa Cruz de la Sierra, Bolivia**
+> **Build With AI 2026 · Wati · Santa Cruz de la Sierra, Bolivia**
 
 Pipeline IoT para ESP32-S3 con arquitectura 100% free tier en GCP.
 
@@ -14,8 +14,9 @@ ESP32 (HTTP 30s) ──► ingest-telemetry ──► BigQuery raw_telemetry
 ESP32 (NDJSON fallback) ──► GCS wati-497921-iot-esp32-uploads/uploads/
                         └──► process-gcs-batch ──► BigQuery
 
-Cloud Scheduler ──► refresh-latest (cada 5 min) ──► latest_per_device
-              └──► run-agents (cada 1h, alertas)
+Cloud Scheduler ──► temp-alerts-job (cada 1h)     ──► run-agents
+              ├──► fetch-weather-job (cada 1h)   ──► fetch-weather
+              └──► run-predictions-job (cada 6h) ──► run-predictions
 
 Flutter ──► Cloud Run API ──► Firestore (latest)
                          └──► BigQuery (history)
@@ -28,17 +29,19 @@ Flutter ──► scan-bill ──► Cloud Vision OCR ──► Firestore bills
 ```
 cloud-wati/
 ├── functions/
+│   ├── fetch-weather/      # HTTP trigger Scheduler, OpenWeather API
 │   ├── ingest-telemetry/   # HTTP trigger ESP32 (Node.js 20)
 │   ├── process-gcs-batch/  # GCS trigger OBJECT_FINALIZE
+│   ├── run-agents/         # HTTP interno, Gemini 1.5 Flash
+│   ├── run-predictions/    # HTTP trigger Scheduler, BQ ML
 │   ├── scan-bill/          # HTTP trigger OCR facturas CRE
-│   ├── refresh-latest/     # HTTP trigger Cloud Scheduler
-│   └── run-agents/         # HTTP interno, Gemini 1.5 Flash
+│   └── train-models/       # HTTP trigger Scheduler, BQ ML
 ├── cloud-run-api/          # Express API + Dockerfile
 ├── terraform/              # GCS, BigQuery, Firestore, IAM
 ├── spec/                   # JSON Schema, OpenAPI
-├── scripts/                # generate-test-data.js
-├── tasks/                  # Harness tasks T-001..T-022
-├── skills/                 # Harness skills SK-001..SK-010
+├── scripts/                # generadores y utilidades
+├── tasks/                  # Harness tasks
+├── skills/                 # Harness skills
 ├── cloudbuild.yaml         # CI/CD Cloud Build
 ├── gcp-health-check.sh     # Verificación de entorno
 ├── run.sh                  # Harness principal
@@ -72,42 +75,21 @@ source .env.harness
 bash run.sh
 ```
 
-### Solo una fase
-
-```bash
-bash run.sh --from-fase 2   # Desde fase 2
-bash run.sh --task T-007    # Una sola tarea
-bash run.sh --dry-run       # Validar sin ejecutar
-```
-
 ### Terraform (Fase 1)
 
 ```bash
 cd terraform
 cp terraform.tfvars.example terraform.tfvars
-# Editar terraform.tfvars con tu project_id
 terraform init
 terraform plan
 terraform apply
 ```
 
-### Deploy manual (sin Cloud Build)
-
-```bash
-# Función ingest-telemetry
-gcloud functions deploy ingest-telemetry \
-  --gen2 --runtime=nodejs20 --region=us-central1 \
-  --trigger-http --allow-unauthenticated \
-  --memory=256MB --timeout=60s \
-  --source=./functions/ingest-telemetry \
-  --set-env-vars=GCP_PROJECT_ID=wati-497921,BQ_DATASET=iot_telemetry,BQ_RAW_TABLE=raw_telemetry,BQ_ERRORS_TABLE=errors,FIRESTORE_DEVICES_COLLECTION=devices
-```
-
-### Test rápido
+### Generación de Datos de Prueba
 
 ```bash
 # Simular ESP32 (reemplazar URL con la del deploy)
-curl -X POST https://INGEST_FUNCTION_URL \
+curl -X POST https://us-central1-wati-497921.cloudfunctions.net/ingest-telemetry \
   -H 'Content-Type: application/json' \
   -d '{
     "hardware":    {"device_id":"TBOT-SCZ-00142","firmware_version":"1.0.7"},
@@ -115,10 +97,6 @@ curl -X POST https://INGEST_FUNCTION_URL \
     "telemetry":   {"temp_interior_c":24.5,"temp_exterior_c":29.5,"samples_averaged":3},
     "diagnostics": {"uptime_s":3600,"wifi_rssi_dbm":-65}
   }'
-
-# Generar datos de prueba NDJSON
-node scripts/generate-test-data.js --count 10 --device TBOT-SCZ-00142 > /tmp/test.ndjson
-gsutil cp /tmp/test.ndjson gs://wati-497921-iot-esp32-uploads/uploads/uid_test/$(date +%Y-%m-%d)/test.ndjson
 ```
 
 ## Free Tier Status
@@ -132,33 +110,10 @@ gsutil cp /tmp/test.ndjson gs://wati-497921-iot-esp32-uploads/uploads/uid_test/$
 | GCS | 5 GB | < 1 GB ✅ |
 | Cloud Run | 2M req/mes | < 50K ✅ |
 | Cloud Vision | 1K unidades/mes | < 100 ✅ |
-| Cloud Scheduler | 3 jobs | 2 jobs ✅ |
+| Cloud Scheduler | 3 jobs | 3 jobs ✅ |
 
----
+## Machine Learning y Weather (Fase 8)
 
-## Integración con WeatherAPI y Predicciones de BQ ML (Fase 7)
+El pipeline incluye agentes de Gemini, un cron para traer datos meteorológicos desde OpenWeather, entrenamiento de modelos en BigQuery ML y un cron de inferencias para proyectar temperaturas. Las predicciones y umbrales están automatizadas por completo utilizando la capacidad gratuita de BigQuery ML.
 
-### Obtener API Key de WeatherAPI
-
-Para obtener los pronósticos meteorológicos de Santa Cruz de la Sierra:
-
-1. Regístrate en [WeatherAPI.com](https://www.weatherapi.com/).
-2. Genera una API Key gratuita (Free tier = 1M de llamadas al mes).
-3. Guárdala en Google Cloud Secret Manager bajo el nombre `weather-api-key`:
-
-   ```bash
-   echo -n "TU_API_KEY" | gcloud secrets create weather-api-key \
-       --data-file=- \
-       --project=wati-497921
-   ```
-
-### Dashboard de Predicciones en Looker Studio
-
-Para visualizar las predicciones de temperatura (incremento > 0.5°C o predicciones continuas):
-
-1. Ingresa a [Looker Studio](https://lookerstudio.google.com/).
-2. Crea una nueva fuente de datos ("Data Source") conectada a **BigQuery**.
-3. Selecciona tu proyecto (`wati-497921`), el dataset `iot_telemetry` y la tabla `temperature_predictions`.
-4. Utiliza los campos `prediction_hour` como eje X (tiempo), `predicted_temp_c` como métrica de temperatura estimada, y `will_increase_6h` (booleano) para resaltar momentos de riesgo de alta temperatura interior.
-
-*SDD-001-GCP v2.1 · Revisado: 30 mayo 2026 · Demo Day: 31 mayo 2026*
+*Consolidado v3.0 · Revisado: 31 mayo 2026*

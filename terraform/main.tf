@@ -62,7 +62,7 @@ resource "google_storage_bucket" "bills_ocr" {
 resource "google_bigquery_dataset" "iot_telemetry" {
   dataset_id                 = var.bq_dataset
   location                   = "US"
-  description                = "IoT telemetry dataset — Wati CRE"
+  description                = "IoT telemetry dataset — Wati"
   delete_contents_on_destroy = false
 }
 
