@@ -1,0 +1,14 @@
+{
+  "name": "run-predictions",
+  "version": "1.0.0",
+  "description": "Run temperature predictions using trained models",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "@google-cloud/bigquery": "^7.9.0",
+    "@google-cloud/secret-manager": "^5.0.1"
+  }
+}

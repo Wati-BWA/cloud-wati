@@ -1,0 +1,100 @@
+# ──────────────────────────────────────────────
+# Node.js
+# ──────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.node_repl_history
+*.tgz
+package-lock.json
+
+# ──────────────────────────────────────────────
+# Environment & Secrets
+# ──────────────────────────────────────────────
+.env
+.env.*
+!.env.harness          # plantilla sin secretos → sí se versiona
+*.key
+*.pem
+service-account*.json
+*-key.json
+credentials.json
+
+# ──────────────────────────────────────────────
+# Terraform
+# ──────────────────────────────────────────────
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfstate.*.backup
+terraform/tfplan.binary
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+.terraform/
+*.tfstate
+*.tfstate.backup
+tfplan.binary
+crash.log
+
+# ──────────────────────────────────────────────
+# GCP / Cloud Build
+# ──────────────────────────────────────────────
+.gcloudignore
+*.gcf.zip
+
+# ──────────────────────────────────────────────
+# Docker
+# ──────────────────────────────────────────────
+Dockerfile*.local
+.dockerignore.local
+
+# ──────────────────────────────────────────────
+# Logs y temporales
+# ──────────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+/tmp/
+*.ndjson.tmp
+.cache/
+
+# ──────────────────────────────────────────────
+# IDE / OS
+# ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ──────────────────────────────────────────────
+# Test coverage
+# ──────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ──────────────────────────────────────────────
+# Checkpoint / context (generados en runtime)
+# ──────────────────────────────────────────────
+context.json
+checkpoint_*.json
+
+# ──────────────────────────────────────────────
+# Harness
+# ──────────────────────────────────────────────
+context.json
+checkpoint_*.json
+run.sh
+
+# ──────────────────────────────────────────────
+# Skills
+# ──────────────────────────────────────────────
+skills/
+tasks/
+spec/

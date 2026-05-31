@@ -1,0 +1,7 @@
+project_id      = "wati-497921"
+region          = "us-central1"
+gcs_bucket_name = "wati-497921-iot-esp32-uploads"
+bq_dataset      = "iot_telemetry"
+bq_raw_table    = "raw_telemetry"
+bq_errors_table = "errors"
+bq_latest_table = "latest_per_device"

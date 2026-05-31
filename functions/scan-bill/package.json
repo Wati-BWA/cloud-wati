@@ -1,0 +1,20 @@
+{
+  "name": "scan-bill",
+  "version": "1.0.0",
+  "description": "Cloud Function 2gen - HTTP trigger para OCR de facturas CRE Bolivia con Cloud Vision",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.10.0",
+    "@google-cloud/storage": "^7.8.0",
+    "@google-cloud/vision": "^4.3.2",
+    "firebase-admin": "^12.2.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@google-cloud/functions-framework": "^3.3.0"
+  },
+  "scripts": {
+    "dev": "functions-framework --target=scanBill --port=8083"
+  }
+}

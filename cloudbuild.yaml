@@ -1,0 +1,210 @@
+steps:
+  # ──────────────────────────────────────────────
+  # Función 1: ingest-telemetry (HTTP real-time)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-ingest-telemetry
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - ingest-telemetry
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --allow-unauthenticated
+      - --memory=256MB
+      - --timeout=60s
+      - --source=./functions/ingest-telemetry
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,BQ_DATASET=iot_telemetry,BQ_RAW_TABLE=raw_telemetry,BQ_ERRORS_TABLE=errors,FIRESTORE_DEVICES_COLLECTION=devices
+
+  # ──────────────────────────────────────────────
+  # Función 2: process-gcs-batch (GCS trigger)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-process-gcs-batch
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - process-gcs-batch
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-event-filters=type=google.cloud.storage.object.v1.finalized
+      - --trigger-event-filters=bucket=cloud-wati-iot-raw
+      - --memory=512MB
+      - --timeout=540s
+      - --source=./functions/process-gcs-batch
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,BQ_DATASET=iot_telemetry,BQ_RAW_TABLE=raw_telemetry,BQ_ERRORS_TABLE=errors,FIRESTORE_DEVICES_COLLECTION=devices
+
+  # ──────────────────────────────────────────────
+  # Función 3: scan-bill (HTTP, OCR facturas)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-scan-bill
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - scan-bill
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --memory=512MB
+      - --timeout=60s
+      - --source=./functions/scan-bill
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,BILLS_BUCKET=cloud-wati-bills-ocr
+
+  # ──────────────────────────────────────────────
+  # Función 4: refresh-latest (Cloud Scheduler)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-refresh-latest
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - refresh-latest
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --memory=256MB
+      - --timeout=120s
+      - --source=./functions/refresh-latest
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,BQ_DATASET=iot_telemetry,BQ_RAW_TABLE=raw_telemetry,BQ_LATEST_TABLE=latest_per_device
+
+  # ──────────────────────────────────────────────
+  # Función 5: run-agents (HTTP interno, no auth pública)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-run-agents
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - run-agents
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --no-allow-unauthenticated
+      - --memory=512MB
+      - --timeout=120s
+      - --source=./functions/run-agents
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-secrets=GEMINI_API_KEY=gemini-key:latest
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID
+
+  # ──────────────────────────────────────────────
+  # Función 6: fetch-weather (WeatherAPI -> BQ)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-fetch-weather
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - fetch-weather
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --no-allow-unauthenticated
+      - --memory=256MB
+      - --timeout=60s
+      - --source=./functions/fetch-weather
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID
+      - --min-instances=0
+
+  # ──────────────────────────────────────────────
+  # Función 7: train-models (BQ ML)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-train-models
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - train-models
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --no-allow-unauthenticated
+      - --memory=256MB
+      - --timeout=540s
+      - --source=./functions/train-models
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID
+      - --min-instances=0
+
+  # ──────────────────────────────────────────────
+  # Función 8: run-predictions (WeatherAPI -> BQ ML -> BQ)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-run-predictions
+    args:
+      - gcloud
+      - functions
+      - deploy
+      - run-predictions
+      - --gen2
+      - --runtime=nodejs20
+      - --region=us-central1
+      - --trigger-http
+      - --no-allow-unauthenticated
+      - --memory=256MB
+      - --timeout=300s
+      - --source=./functions/run-predictions
+      - --service-account=ingest-function-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID
+      - --min-instances=0
+
+  # ──────────────────────────────────────────────
+  # Cloud Run: API de usuario (Docker build → push → deploy)
+  # ──────────────────────────────────────────────
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build-cloud-run
+    args:
+      - build
+      - -t
+      - gcr.io/$PROJECT_ID/cloud-wati:$COMMIT_SHA
+      - ./cloud-run-api
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: push-cloud-run
+    args:
+      - push
+      - gcr.io/$PROJECT_ID/cloud-wati:$COMMIT_SHA
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: deploy-cloud-run
+    args:
+      - gcloud
+      - run
+      - deploy
+      - cloud-wati
+      - --image=gcr.io/$PROJECT_ID/cloud-wati:$COMMIT_SHA
+      - --region=us-central1
+      - --platform=managed
+      - --memory=256Mi
+      - --min-instances=0
+      - --concurrency=80
+      - --allow-unauthenticated
+      - --service-account=client-api-sa@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT_ID=$PROJECT_ID,BQ_DATASET=iot_telemetry,BQ_RAW_TABLE=raw_telemetry,FIRESTORE_DEVICES_COLLECTION=devices
+
+# Timeout total: 20 min (bien dentro del límite de 120 min/día gratuitos de Cloud Build)
+timeout: 1200s
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,8 @@
+# Copia este archivo como terraform.tfvars y ajusta los valores
+# NO commitear terraform.tfvars (está en .gitignore)
+
+project_id       = "TU-GCP-PROJECT-ID"
+region           = "us-central1"
+gcs_bucket_iot   = "cloud-wati-iot-raw"
+gcs_bucket_bills = "cloud-wati-bills-ocr"
+bq_dataset       = "iot_telemetry"

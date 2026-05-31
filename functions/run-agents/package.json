@@ -1,0 +1,19 @@
+{
+  "name": "run-agents",
+  "version": "1.0.0",
+  "description": "Cloud Function 2gen - Orquestador de agentes IA con Gemini 1.5 Flash para alertas de temperatura",
+  "main": "index.js",
+  "engines": { "node": "20" },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.10.0",
+    "@google-ai/generativelanguage": "^2.0.1",
+    "firebase-admin": "^12.2.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@google-cloud/functions-framework": "^3.3.0"
+  },
+  "scripts": {
+    "dev": "functions-framework --target=runAgents --port=8085"
+  }
+}

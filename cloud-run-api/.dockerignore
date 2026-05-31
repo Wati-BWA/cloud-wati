@@ -1,0 +1,7 @@
+node_modules/
+npm-debug.log*
+.env
+*.key
+*.json
+!package.json
+Dockerfile.local
