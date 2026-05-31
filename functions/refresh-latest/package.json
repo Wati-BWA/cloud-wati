@@ -1,16 +1,6 @@
 {
-  "name": "refresh-latest",
+  "name": "temp-function",
   "version": "1.0.0",
-  "description": "Cloud Function 2gen - HTTP trigger por Cloud Scheduler cada 5 min para actualizar latest_per_device",
   "main": "index.js",
-  "engines": { "node": "20" },
-  "dependencies": {
-    "@google-cloud/bigquery": "^7.9.0"
-  },
-  "devDependencies": {
-    "@google-cloud/functions-framework": "^3.3.0"
-  },
-  "scripts": {
-    "dev": "functions-framework --target=refreshLatest --port=8084"
-  }
+  "dependencies": {}
 }

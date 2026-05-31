@@ -128,7 +128,7 @@ checkpoint_fase_1() {
   check_gcp_resource "Service account client-api-sa existe" \
     "gcloud iam service-accounts describe client-api-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com"
   check_cmd "Schema BigQuery raw_telemetry (3 campos)" \
-    "bq show --format=json --project_id=${GCP_PROJECT_ID} ${BQ_DATASET}.${BQ_RAW_TABLE} | python3 -c \"import json,sys; s=json.load(sys.stdin); print(len(s['schema']['fields']))\"" \
+    "bq show --format=json --project_id=${GCP_PROJECT_ID} ${BQ_DATASET}.${BQ_RAW_TABLE} | node -e \"const fs=require('fs');const s=JSON.parse(fs.readFileSync(0,'utf8'));console.log((s.schema&&s.schema.fields?s.schema.fields.length:0));\"" \
     "3"
 }
 
