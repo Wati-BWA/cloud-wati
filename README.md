@@ -139,10 +139,13 @@ gsutil cp /tmp/test.ndjson gs://wati-497921-iot-esp32-uploads/uploads/uid_test/$
 ## Integración con WeatherAPI y Predicciones de BQ ML (Fase 7)
 
 ### Obtener API Key de WeatherAPI
+
 Para obtener los pronósticos meteorológicos de Santa Cruz de la Sierra:
+
 1. Regístrate en [WeatherAPI.com](https://www.weatherapi.com/).
 2. Genera una API Key gratuita (Free tier = 1M de llamadas al mes).
 3. Guárdala en Google Cloud Secret Manager bajo el nombre `weather-api-key`:
+
    ```bash
    echo -n "TU_API_KEY" | gcloud secrets create weather-api-key \
        --data-file=- \
@@ -150,7 +153,9 @@ Para obtener los pronósticos meteorológicos de Santa Cruz de la Sierra:
    ```
 
 ### Dashboard de Predicciones en Looker Studio
+
 Para visualizar las predicciones de temperatura (incremento > 0.5°C o predicciones continuas):
+
 1. Ingresa a [Looker Studio](https://lookerstudio.google.com/).
 2. Crea una nueva fuente de datos ("Data Source") conectada a **BigQuery**.
 3. Selecciona tu proyecto (`wati-497921`), el dataset `iot_telemetry` y la tabla `temperature_predictions`.

@@ -40,10 +40,12 @@ h()    { echo -e "\n${BOLD}${BLUE}── $1 ──${RESET}"; }
 PASS=0; FAIL=0; WARN=0
 
 # Cargar variables de entorno
+export PATH="${ROOT_DIR}/scripts/bin:/mnt/c/Users/Moises/AppData/Local/Google/Cloud SDK/google-cloud-sdk/bin:/mnt/c/Users/Moises/AppData/Local/Microsoft/WinGet/Packages/Hashicorp.Terraform_Microsoft.Winget.Source_8wekyb3d8bbwe:${PATH}"
 [[ -f "${ROOT_DIR}/.env" ]] && source "${ROOT_DIR}/.env"
+[[ -f "${ROOT_DIR}/.env.harness" ]] && source "${ROOT_DIR}/.env.harness"
 export GCP_PROJECT_ID="${GCP_PROJECT_ID:-iot-pipeline-demo}"
 export GCP_REGION="${GCP_REGION:-us-central1}"
-export GCS_BUCKET_NAME="${GCS_BUCKET_NAME:-cloud-wati-iot-raw}"
+export GCS_BUCKET_NAME="${GCS_BUCKET_NAME:-${GCS_BUCKET_IOT:-cloud-wati-iot-raw}}"
 export BQ_DATASET="${BQ_DATASET:-iot_telemetry}"
 export BQ_RAW_TABLE="${BQ_RAW_TABLE:-raw_telemetry}"
 export BQ_ERRORS_TABLE="${BQ_ERRORS_TABLE:-errors}"
