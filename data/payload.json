@@ -1,0 +1,6 @@
+{
+  "hardware":{"device_id":"ESP32_MAC_A1B2C3","firmware_version":"1.2.0-MINIMAL"},
+  "tenant":{"user_id":"USR_987654321"},
+  "telemetry":{"temp_interior_c":24.5,"temp_exterior_c":29.5,"samples_averaged":3},
+  "diagnostics":{"uptime_s":3600,"wifi_rssi_dbm":-65}
+}

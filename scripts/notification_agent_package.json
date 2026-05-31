@@ -1,0 +1,12 @@
+{
+  "name": "notification-agent",
+  "version": "1.0.0",
+  "description": "LLM notification agent: Gemini + Firebase Admin (ADC) → FCM",
+  "main": "index.js",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "@google-cloud/vertexai":           "^1.9.3",
+    "firebase-admin":                   "^12.7.0"
+  }
+}

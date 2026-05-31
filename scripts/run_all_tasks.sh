@@ -28,13 +28,13 @@ REPORT_FILE="scripts/reports/execution_report_$(date +%Y%m%d_%H%M%S).txt"
 mkdir -p scripts/reports
 
 # Contadores
-TOTAL=33
+TOTAL=40
 PASS=0
 FAIL=0
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
-echo "  EJECUTANDO 33 TAREAS DEL HARNESS"
+echo "  EJECUTANDO 40 TAREAS DEL HARNESS"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
 echo "Reporte: $REPORT_FILE"
@@ -301,7 +301,7 @@ run_cmd "T-026" "Endpoint predicciones API" 'echo "✅ Endpoint /predictions dis
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
 # ============================================
-# FASE 9: Predicción + Notificaciones LLM (T-027 a T-033)
+# FASE 9: ARIMA + Notificaciones LLM (T-027 a T-040)
 # ============================================
 echo ""
 echo "───────────────────────────────────────────────────────────"
@@ -309,86 +309,143 @@ echo "  FASE 9 - PREDICCIONES ARIMA + NOTIFICACIONES LLM"
 echo "───────────────────────────────────────────────────────────"
 echo ""
 
-# T-027: Actualizar fetch-weather con pronóstico horario real
-run_cmd "T-027" "Deploy fetch-weather (WeatherAPI real)" 'gcloud functions deploy fetch-weather \
-    --gen2 \
-    --runtime=nodejs20 \
-    --region "${GCP_REGION}" \
+# T-027: Deploy fetch-weather con OpenWeatherMap
+run_cmd "T-027" "Copiar fuentes y deploy fetch-weather (OpenWeatherMap)" '
+  cp scripts/fetch_weather_main.py functions/fetch-weather/main.py
+  cp scripts/fetch_weather_requirements.txt functions/fetch-weather/requirements.txt
+  gcloud functions deploy fetch-weather \
+    --region="${GCP_REGION}" \
+    --runtime=python311 \
     --trigger-http \
-    --memory=256MB \
-    --timeout=60s \
-    --entry-point=fetchWeather \
+    --entry-point=fetch_weather \
     --source=./functions/fetch-weather \
-    --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BQ_DATASET=iot_dataset,LOCATION=-17.7833,-63.1821" \
-    --set-secrets="WEATHER_API_KEY=weather-api-key:latest" \
+    --set-secrets="OPENWEATHER_API_KEY=openweather-api-key:latest" \
     --no-allow-unauthenticated \
     --project="${GCP_PROJECT_ID}" \
     --quiet 2>/dev/null'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-# T-028: Crear tabla weather_forecasts + vista telemetry_enriched
-run_cmd "T-028a" "Crear dataset iot_dataset" \
-    'bq mk --dataset --location="${GCP_REGION}" "${GCP_PROJECT_ID}:iot_dataset" 2>/dev/null || true; bq ls --datasets | grep -q iot_dataset'
+# T-028: Tabla weather_forecasts
+run_cmd "T-028" "Crear dataset iot_dataset y tabla weather_forecasts" '
+  bq mk --dataset --location="${GCP_REGION}" "${GCP_PROJECT_ID}:iot_dataset" 2>/dev/null || true
+  bq mk --table \
+    --schema=scripts/schemas/weather_forecasts.json \
+    --time_partitioning_field=forecast_hour \
+    "${GCP_PROJECT_ID}:iot_dataset.weather_forecasts" 2>/dev/null || echo "ya existe"
+  bq show "${GCP_PROJECT_ID}:iot_dataset.weather_forecasts"'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-run_cmd "T-028b" "Crear tabla weather_forecasts" \
-    'bq mk --table --schema "forecast_hour:TIMESTAMP,location:STRING,temp_c:FLOAT64,humidity:FLOAT64,feelslike_c:FLOAT64,wind_kph:FLOAT64,condition_text:STRING,fetched_at:TIMESTAMP" --time_partitioning_field forecast_hour "${GCP_PROJECT_ID}:iot_dataset.weather_forecasts" 2>/dev/null || echo "ya existe"'
+# T-029: Vista telemetry_enriched
+run_cmd "T-029" "Crear vista telemetry_enriched" '
+  bq query --use_legacy_sql=false --project_id="${GCP_PROJECT_ID}" \
+    "$(cat scripts/sql/telemetry_enriched.sql)"
+  bq show "${GCP_PROJECT_ID}:iot_dataset.telemetry_enriched"'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-# T-029: Crear vista telemetry_enriched (requiere datos en raw_telemetry)
-run_cmd "T-029" "Verificar que iot_dataset.weather_forecasts existe" \
-    'bq show "${GCP_PROJECT_ID}:iot_dataset.weather_forecasts"'
+# T-030: Entrenar modelo ARIMA_PLUS
+run_cmd "T-030" "Entrenar modelo ARIMA_PLUS temp_forecast_model (puede tardar)" '
+  bq query --use_legacy_sql=false --project_id="${GCP_PROJECT_ID}" \
+    "$(cat scripts/sql/train_model.sql)"
+  bq show "${GCP_PROJECT_ID}:iot_dataset.temp_forecast_model"'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-# T-030: Crear tabla predictions_6h
-run_cmd "T-030" "Crear tabla predictions_6h" \
-    'bq mk --table --schema "device_id:STRING,forecast_timestamp:TIMESTAMP,predicted_temp:FLOAT64,lower_bound:FLOAT64,upper_bound:FLOAT64,confidence_level:FLOAT64,generated_at:TIMESTAMP" --time_partitioning_field forecast_timestamp "${GCP_PROJECT_ID}:iot_dataset.predictions_6h" 2>/dev/null || true; bq show "${GCP_PROJECT_ID}:iot_dataset.predictions_6h"'
+# T-031: Scheduled Query ML.FORECAST
+run_cmd "T-031" "Crear tabla predictions_6h y ejecutar ML.FORECAST inicial" '
+  bq mk --table \
+    --schema="device_id:STRING,forecast_timestamp:TIMESTAMP,predicted_temp:FLOAT64,lower_bound:FLOAT64,upper_bound:FLOAT64,confidence_level:FLOAT64,generated_at:TIMESTAMP" \
+    --time_partitioning_field=forecast_timestamp \
+    "${GCP_PROJECT_ID}:iot_dataset.predictions_6h" 2>/dev/null || echo "ya existe"
+  bq query --use_legacy_sql=false --project_id="${GCP_PROJECT_ID}" \
+    "$(cat scripts/sql/forecast_6h.sql)"
+  bq show "${GCP_PROJECT_ID}:iot_dataset.predictions_6h"'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-# T-031: Deploy check-new-predictions + Pub/Sub topic
-run_cmd "T-031a" "Crear tópico Pub/Sub notifications" \
-    'gcloud pubsub topics create notifications --project="${GCP_PROJECT_ID}" 2>/dev/null || true; gcloud pubsub topics describe notifications --project="${GCP_PROJECT_ID}" --format="value(name)" | grep -q notifications'
-[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
-
-run_cmd "T-031b" "Deploy check-new-predictions CF" 'gcloud functions deploy check-new-predictions \
+# T-032: Deploy check-new-predictions
+run_cmd "T-032" "Deploy check-new-predictions CF (BQ → Pub/Sub)" '
+  cp scripts/check_predictions_index.js functions/check-new-predictions/index.js
+  cp scripts/check_predictions_package.json functions/check-new-predictions/package.json
+  gcloud functions deploy check-new-predictions \
     --gen2 \
     --runtime=nodejs20 \
-    --region "${GCP_REGION}" \
+    --region="${GCP_REGION}" \
     --trigger-http \
     --memory=256MB \
     --timeout=60s \
     --entry-point=checkNewPredictions \
     --source=./functions/check-new-predictions \
-    --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},BQ_DATASET=iot_dataset,PUBSUB_TOPIC=notifications,ALERT_TEMP_THRESHOLD=30" \
+    --set-env-vars="PROJECT_ID=${GCP_PROJECT_ID},ALERT_TEMP_THRESHOLD=28" \
     --no-allow-unauthenticated \
     --project="${GCP_PROJECT_ID}" \
     --quiet 2>/dev/null'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-# T-032: Deploy notification-agent (Pub/Sub trigger)
-run_cmd "T-032" "Deploy notification-agent CF (Pub/Sub → Gemini → FCM)" 'gcloud functions deploy notification-agent \
+# T-033: Crear tópico Pub/Sub
+run_cmd "T-033" "Crear tópico Pub/Sub notifications" '
+  gcloud pubsub topics create notifications --project="${GCP_PROJECT_ID}" 2>/dev/null || true
+  gcloud pubsub topics describe notifications --project="${GCP_PROJECT_ID}" \
+    --format="value(name)" | grep -q notifications'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-034: Deploy notification-agent (ADC — sin JSON secreto de Firebase)
+run_cmd "T-034" "Deploy notification-agent CF (Pub/Sub → Gemini → FCM, ADC)" '
+  cp scripts/notification_agent_index.js functions/notification-agent/index.js
+  cp scripts/notification_agent_package.json functions/notification-agent/package.json
+  gcloud functions deploy notification-agent \
     --gen2 \
     --runtime=nodejs20 \
-    --region "${GCP_REGION}" \
+    --region="${GCP_REGION}" \
     --trigger-topic=notifications \
     --memory=512MB \
     --timeout=120s \
     --entry-point=notificationAgent \
     --source=./functions/notification-agent \
-    --set-env-vars="GCP_PROJECT_ID=${GCP_PROJECT_ID},VERTEX_LOCATION=${GCP_REGION},GEMINI_MODEL=gemini-2.0-flash-lite" \
-    --set-secrets="FIREBASE_SERVICE_ACCOUNT=firebase-service-account:latest" \
+    --set-env-vars="PROJECT_ID=${GCP_PROJECT_ID},VERTEX_LOCATION=${GCP_REGION},GEMINI_MODEL=gemini-2.0-flash-lite" \
     --no-allow-unauthenticated \
     --project="${GCP_PROJECT_ID}" \
     --quiet 2>/dev/null'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-# T-033: Verificar secretos en Secret Manager
-run_cmd "T-033a" "Verificar secreto weather-api-key" \
-    'gcloud secrets describe weather-api-key --project="${GCP_PROJECT_ID}" --format="value(name)" | grep -q weather-api-key'
+# T-035: Secreto openweather-api-key (Firebase ya no necesita secreto extra)
+run_cmd "T-035" "Verificar secreto openweather-api-key en Secret Manager" '
+  gcloud secrets create openweather-api-key \
+    --replication-policy=automatic \
+    --project="${GCP_PROJECT_ID}" 2>/dev/null || true
+  gcloud secrets describe openweather-api-key \
+    --project="${GCP_PROJECT_ID}" --format="value(name)" | grep -q openweather-api-key'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
-run_cmd "T-033b" "Verificar secreto firebase-service-account" \
-    'gcloud secrets describe firebase-service-account --project="${GCP_PROJECT_ID}" --format="value(name)" 2>/dev/null | grep -q firebase-service-account || echo "⚠️ pendiente — cargar JSON Firebase"'
+# T-036: Test forecast manual
+run_cmd "T-036" "Prueba ML.FORECAST manual (ver predicciones)" '
+  bq query --use_legacy_sql=false --project_id="${GCP_PROJECT_ID}" \
+    "SELECT device_id, forecast_timestamp, ROUND(forecast_value,2) AS predicted_temp_c
+     FROM ML.FORECAST(MODEL \`${GCP_PROJECT_ID}.iot_dataset.temp_forecast_model\`,
+       STRUCT(6 AS horizon)) LIMIT 3"'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-037: Insertar telemetría de prueba
+run_cmd "T-037" "Insertar telemetría de prueba en Firestore" '
+  python scripts/insert_test_telemetry.py'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-038: Verificar publicación en Pub/Sub
+run_cmd "T-038" "Invocar check-new-predictions y verificar Pub/Sub" '
+  gcloud functions call check-new-predictions \
+    --region="${GCP_REGION}" --project="${GCP_PROJECT_ID}"'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-039: Simular notificación FCM
+run_cmd "T-039" "Publicar mensaje prueba en notifications → verificar logs" '
+  gcloud pubsub topics publish notifications \
+    --project="${GCP_PROJECT_ID}" \
+    --message="{\"device_id\":\"test-device\",\"predicted_temp\":31.2,\"feels_like\":33.0,\"forecast_for\":\"2026-05-31T15:00:00Z\"}"
+  sleep 12
+  gcloud functions logs read notification-agent \
+    --gen2 --region="${GCP_REGION}" --project="${GCP_PROJECT_ID}" --limit=10'
+[ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
+
+# T-040: Prueba end-to-end completa
+run_cmd "T-040" "Prueba end-to-end completa del pipeline" '
+  python scripts/e2e_test_flow.py'
 [ $? -eq 0 ] && PASS=$((PASS+1)) || FAIL=$((FAIL+1))
 
 # ============================================
@@ -399,14 +456,13 @@ echo "════════════════════════�
 echo "  RESUMEN FINAL"
 echo "═══════════════════════════════════════════════════════════"
 echo ""
-echo -e "  Total tareas ejecutadas: ${BLUE}33${NC}"
+echo -e "  Total tareas ejecutadas: ${BLUE}40${NC}"
 echo -e "  ${GREEN}✅ Pasaron: $PASS${NC}"
 echo -e "  ${RED}❌ Fallaron: $FAIL${NC}"
 echo ""
 echo -e "  📄 Reporte detallado: ${BLUE}$REPORT_FILE${NC}"
 echo ""
 
-# Mostrar tareas fallidas
 if [ $FAIL -gt 0 ]; then
     echo -e "${YELLOW}Tareas que requieren atención:${NC}"
     grep "❌" "$REPORT_FILE" | sed 's/❌/ -/g'
@@ -414,3 +470,4 @@ fi
 
 echo ""
 echo "═══════════════════════════════════════════════════════════"
+

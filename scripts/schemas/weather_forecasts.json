@@ -1,0 +1,5 @@
+[
+  {"name": "forecast_hour", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "temp",          "type": "FLOAT",     "mode": "REQUIRED"},
+  {"name": "humidity",      "type": "INTEGER",   "mode": "REQUIRED"}
+]

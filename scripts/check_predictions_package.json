@@ -1,0 +1,11 @@
+{
+  "name": "check-new-predictions",
+  "version": "1.0.0",
+  "description": "Reads BigQuery predictions and publishes alerts to Pub/Sub",
+  "main": "index.js",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@google-cloud/bigquery": "^7.9.1",
+    "@google-cloud/pubsub":   "^4.7.0"
+  }
+}
